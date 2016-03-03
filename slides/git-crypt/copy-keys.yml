@@ -1,0 +1,16 @@
+- name: copy keys
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: debug without no_log
+      debug:
+        msg="{{ item.key }} {{ item.value.content }}"
+      with_dict: secret_files
+      when: False
+
+    - name: debug with no_log
+      debug:
+        msg="{{ item.key }} {{ item.value.content }}"
+      no_log: true   # this avoids logging data // HL
+      with_dict: secret_files
+      when: False

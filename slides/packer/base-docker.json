@@ -1,0 +1,20 @@
+{
+  "builders": [{
+    "type": "docker",
+    "image": "ubuntu:14.04",
+    "commit": true
+  }],
+  "provisioners": [{
+    "type": "shell",
+    "scripts": [
+      "install-docker-prereq.sh",
+      "install-ansible.sh"
+    ]
+  },
+  {
+    "type": "ansible-local",
+    "playbook_file": "base-aws.yml",
+    "playbook_paths": [ "playbooks/." ],
+    "role_paths": [ "roles/." ]
+  }]
+}

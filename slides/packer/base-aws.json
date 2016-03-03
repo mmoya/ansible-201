@@ -1,0 +1,22 @@
+{
+  "builders": [{
+    "type": "amazon-ebs",
+    "region": "eu-west-1",
+    "source_ami": "ami-47a23a30",
+    "ami_name": "ansible-workshop-base-{{ timestamp }}",
+    "instance_type": "m3.medium",
+    "ssh_username": "ubuntu"
+  }],
+  "provisioners": [{
+    "type": "shell",
+    "scripts": [
+      "install-ansible.sh"
+    ]
+  },
+  {
+    "type": "ansible-local",
+    "playbook_file": "base-aws.yml",
+    "playbook_paths": [ "playbooks/." ],
+    "role_paths": [ "roles/." ]
+  }]
+}

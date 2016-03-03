@@ -1,0 +1,6 @@
+- hosts: all
+  gather_facts: no
+  tasks:
+    - name: debug
+      debug:
+        msg="You make it to the debug task. Congrats!"

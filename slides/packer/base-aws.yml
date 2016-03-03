@@ -1,0 +1,3 @@
+- include: playbooks/base.yml
+- include: playbooks/node-exporter.yml
+- include: playbooks/docker.yml

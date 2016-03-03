@@ -1,0 +1,613 @@
+WorkshopsWeLove: Ansible 201
+5 Mar 2016
+Tags: ansible, workshop, git-crypt, packer
+
+Maykel Moya
+Systems Engineer, ShuttleCloud
+https://mmoya.org/
+
+* Thanks for making this workshop possible
+
+.html thanks-sceng.html
+
+* Agenda
+
+git-crypt
+
+- Managing secrets with `git-crypt`.
+- `ansible-vault` vs. `git-crypt`.
+
+Dynamic inventories
+
+- Built-in dynamic inventories.
+- Manage containers from python.
+- Write a custom dynamic inventory.
+
+Integrations
+
+- Use `ansible` to provision `packer` images.
+
+Callbacks
+
+- Fail if your local clone is outdated.
+
+* git-crypt
+
+From the [[https://www.agwa.name/projects/git-crypt/][website]]: "git-crypt enables _transparent_ encryption and decryption of files in a git repository."
+
+- *Install* it:
+
+    # apt-get install git-crypt
+
+available since [[http://packages.ubuntu.com/search?keywords=git-crypt][wily]] (oct 2015) and [[https://packages.debian.org/search?keywords=git-crypt][stretch]] (may 2015), there is also a ppa for [[https://launchpad.net/~avacariu/+archive/ubuntu/git-crypt?field.series_filter=trusty][trusty]].
+
+- *Create* a key:
+
+.play git-crypt/create-key.sh /^git/,$
+
+* git-crypt (contd.)
+
+We need a repo:
+
+.play git-crypt/create-repo.sh /^mkdir/,$
+
+* Managing secrets with git-crypt
+
+- *Associate* the repo with a key (aka _unlock_):
+
+.play git-crypt/unlock-repo.sh /^git-crypt/,$
+
+- *Specify* what to encrypt:
+
+.play git-crypt/configure-encryption.sh /^echo/,$
+
+- *Enjoy* transparent encryption:
+
+.play git-crypt/commit-secret.sh /^mkdir/,$
+
+- *No*4th* step.
+
+* Managing secrets with git-crypt (contd.)
+
+.image images/easy.jpg 500 _
+
+* Managing secrets with git-crypt (contd.)
+
+Let's check that transparent encryption is actually working:
+
+- Clone the repo:
+
+.play git-crypt/clone-repo.sh /^git/,$
+
+- Look at any `host_vars/**/secrets.yml` file:
+
+.play git-crypt/show-secret.sh /^cd/,$
+
+- Unlock the repo and look again:
+
+.play git-crypt/unlock-clone.sh /^git-crypt/,$
+
+- Finally relock it:
+
+.play git-crypt/lock-clone.sh /^git-crypt/,$
+
+* Managing secrets with git-crypt (contd.)
+
+- `.gitattributes` follows the same rules of `.gitignore`. You can have one inside any directory.
+- Remember to version it.
+
+for the curious:
+
+- inspect what _git-crypt_unlock_ did:
+
+.play git-crypt/inspect.sh /^git/,$ HLxxx
+
+- check the documentation of [[https://git-scm.com/book/en/v2/Customizing-Git-Git-Attributes][git attributes]].
+
+* Managing secrets with git-crypt (contd.)
+
+Read _Security_ and _Limitations_ in the `git-crypt` [[https://www.agwa.name/projects/git-crypt/][website]].
+
+TL;DR
+
+- Git filters were not designed with encryption in mind.
+- `git-crypt` doesn't encrypt file names, commit messages or any other metadata.
+
+When `git-crypt` really shines?
+
+- You have a repository were most data is public (ie: not required to be encrypted).
+- You have a bunch of _small_ files you need/want to protect.
+- Like most of ansible repos.
+
+* git-crypt vs. ansible-vault
+
+`git-crypt`
+
+- content agnostic, doesn't know of `ansible`.
+- encrypts any type of file.
+- secret data is decrypted in the local clone once you configure the key.
+
+`ansible-vault`
+
+- integrated with `ansible` and `ansible-playbook`.
+- supports [[https://docs.ansible.com/ansible/playbooks_vault.html#what-can-be-encrypted-with-vault][only]] structured data files.
+- secret data are decrypted in memory only when `ansible{,-playbook}` is running.
+
+* git-crypt vs. ansible-vault (contd.)
+
+.html but.html
+
+* git-crypt vs. ansible-vault (contd.)
+
+Suppose you would like to:
+
+- have TLS secret files inside the ansible repo.
+
+    DOMAIN="ansible-workshop.mmoya.org"
+    cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem tls/$DOMAIN.key
+    git add tls/*.key
+    git ci -m 'Added cert key'
+
+- ... and manipulate these files with *plain*shell*commands*.
+
+.image images/shells-are-good.jpg 250 _
+
+* git-crypt vs. ansible-vault (contd.)
+
+Example: let's compare the [[http://doctrina.org/How-RSA-Works-With-Examples.html#modulus][modulus]] of a remote certificate against the modulus of a local key file:
+
+.code git-crypt/check-modulus.sh /^local_key_modulus/,/}/
+
+.code git-crypt/check-modulus.sh /^remote_cert_modulus/,/}/
+
+.play git-crypt/check-modulus.sh /^DOMAIN/,$
+
+PASS → local `cert.key` matches the certificate of [[https://ansible-workshop.mmoya.org]].
+
+* git-crypt vs. ansible-vault (contd.)
+
+Less easy to achieve if the key were stored like this:
+
+.image images/certkey-in-yaml.png 450 _
+
+borrowed from [[https://dantehranian.wordpress.com/2015/07/24/managing-secrets-with-ansible-vault-the-missing-guide-part-2-of-2/][Managing secrets with Ansible Vault]].
+
+* git-crypt vs. ansible-vault (contd.)
+
+.html also.html
+
+* git-crypt vs. ansible-vault (contd.)
+
+Avoid dumping key material to stdout:
+
+.code git-crypt/copy-keys.yml /debug without/,$
+
+.play git-crypt/ansible01.sh /^ansible/
+
+- bug [[https://github.com/ansible/ansible/issues/8647][8647]]: `no_log` does not control syslog and not valid at play level.
+- bug [[https://github.com/ansible/ansible/issues/10387][10387]]: _no__log:_true_ is not applying to skipped items.
+
+* git-crypt vs. ansible-vault. Recap.
+
+- Use `ansible-vault` for protecting var files.
+- `git-crypt` _might_ be more convenient for data not strictly coupled to ansible.
+- You can lock a `git-crypt` repo after usage but it's a manual process.
+- Remember to set *no_log* in tasks handling secrets.
+
+Both tools can coexist.
+
+- Either way, *protect* your secret data appropiately.
+- If someone get access to your unlocked local clone, `git-crypt` won't save you.
+- Not the same if you're using `ansible-vault`.
+
+* Dynamic inventories
+
+.image images/tell-me-more.jpg 500 _
+
+* Dynamic inventories
+
+- They are, well, _dynamic_.
+- If the inventory file is an executable, ansible runs it.
+- ... and waits for a [[https://docs.ansible.com/ansible/developing_inventory.html#script-conventions][particular json]] in stdout.
+
+It's not easy to maintain a static inventory up to date, even if you fleet is 10 or 20 machines.
+
+If you're in the cloud, your infrastructure is dynamic by design.
+
+* Dynamic inventory (contd.). Built-in inventories.
+
+Ansible have dynamic inventories for various cloud providers. Check the [[https://github.com/ansible/ansible/tree/stable-1.9/plugins/inventory][directory]].
+
+Let's test:
+
+- [[https://github.com/ansible/ansible/blob/stable-1.9/plugins/inventory/ec2.py][ec2.py]]
+- [[https://github.com/ansible/ansible/blob/stable-1.9/plugins/inventory/gce.py][gce.py]]
+
+* Dynamic inventory (contd.). ec2.py.
+
+You need:
+
+- Credentials [[https://boto.readthedocs.org/en/latest/boto_config_tut.html#details][in place]].
+- Some instances to inventory.
+
+Try it:
+
+    pip install boto
+
+    git clone git@github.com:ansible/ansible.git ~/src/ansible
+    cd ~/src/ansible
+    git checkout stable-1.9
+    sed -r -i.bak 's/^regions *=.+$/regions = eu-west-1/' plugins/inventory/ec2.ini
+
+    plugins/inventory/ec2.py --list
+
+* Dynamic inventory (contd.). ec2.py.
+
+With `ansible`:
+
+.play dyninv/ec2-01.sh /echo/,$
+
+* Dynamic inventory (contd.). gce.py.
+
+You need:
+
+- Authenticate to GCE.
+- Some instances to inventory.
+
+Try it:
+
+    pip install apache-libcloud
+
+    # figure out how to properly set gce.ini fields
+
+    plugins/inventory/gce.py --list
+
+* Dynamic inventory (contd.). gce.py.
+
+With `ansible`:
+
+.code dyninv/gce-01.sh /echo/,$
+
+- commands _guessed_ from [[https://github.com/ansible/ansible/blob/stable-1.9/plugins/inventory/gce.py#L44][documentation]].
+- didn't try because I couldn't configure `gce.ini` properly.
+
+* Dynamic inventory (contd.)
+
+.image images/jesus-cool.jpg 500 _
+
+* Quick digression: actual authentication against GCE
+
+- Create a [[https://console.cloud.google.com/permissions/serviceaccounts][service account]] and download the corresponding credentials json file.
+- `pip`install`google-api-python-client`oauth2`
+
+List instances:
+
+.play dyninv/gce-02.py /from googleapiclient/,/return instances/
+
+* Let's write a custom inventory.
+
+- With bash.
+- In a few lines.
+
+.code dyninv/minimal01.sh
+
+demo
+
+* Custom inventory (contd).
+
+- With bash.
+- In a few lines.
+
+.code dyninv/minimal02.sh
+
+demo
+
+* Custom inventory (contd).
+
+.image images/boring.jpg 500 _
+
+* Let's write a custom inventory.
+
+- Create a virtualenv:
+
+    pip install virtualenv
+    mkvirtualenv -p python2 ansible-workshop
+    pip install ansible docker-py ipython
+
+- Create a `docker-py` client instance:
+
+.code dyninv/docker-version.py /^import os/,/^cli/
+
+- Print docker version:
+
+.play dyninv/docker-version.py /^from pprint/,$
+
+.link https://docker-py.readthedocs.org/en/latest/api/ `docker-py` api documentation
+
+* Custom inventory (contd.). What you need to know.
+
+For the custom dynamic inventory
+
+.link https://docker-py.readthedocs.org/en/latest/api/#containers `docker-py` Client.containers
+.link https://docs.python.org/2/library/json.html#json.dump `stdlib` json.dump
+
+for the playground setup
+
+.link https://docker-py.readthedocs.org/en/latest/api/#create_container `docker-py` Client.create_container
+.link https://docker-py.readthedocs.org/en/latest/api/#remove_container `docker-py` Client.remove_container
+.link https://docker-py.readthedocs.org/en/latest/api/#start `docker-py` Client.start
+
+a 10 % of python.
+
+* Custom inventory (contd.). Playground setup.
+
+Download a docker image with python2:
+
+.code dyninv/pull-image.sh /^docker/
+
+Create some containers with random label values:
+
+.play dyninv/create-ct.py /DATACENTERS/,$
+
+* Dynamic inventory (contd.). Playground setup.
+
+want to remove all containers and _start_again_?:
+
+.play dyninv/remove-ct.py /^for/,$
+
+or
+
+.play dyninv/remove-ct.sh /^docker/
+
+- print just the container id: *-q*
+- of all containers (not only those currently running): *-a*
+- whose name contains _instance_: *-f*name=instance*
+
+and forcibly remove the resulting container ids.
+
+* Custom inventory (contd.). Playing with containers.
+
+Let's check that ansible can reach the containers.
+
+- Get the running container ids separated by comma:
+
+.play dyninv/ping-static-only-ids.sh /^docker/
+
+- use the result as a static inventory:
+
+.code dyninv/ping-static-ssh.sh /^ansible/
+
+is `ping` working?
+
+* Custom inventory (contd.). Playing with containers.
+
+.image images/fail28.jpg 500 _
+
+* Custom inventory (contd.). Playing with containers.
+
+What is missing?
+
+.code dyninv/ping-static-ssh.sh /^ansible/
+
+Enter [[https://github.com/ansible/ansible/tree/stable-1.9/lib/ansible/runner/connection_plugins][connection plugins]]:
+
+- `ssh`
+- `paramiko_ssh`
+- `local`
+- etc.
+
+    $ ansible
+    ...
+    -c CONNECTION, --connection=CONNECTION
+                        connection type to use (default=smart)
+    ...
+
+* Custom inventory (contd.). Playing with containers.
+
+[[https://github.com/ansible/ansible/blob/devel/lib/ansible/plugins/connection/docker.py][Docker]] connection plugin:
+
+- available since 2.0.
+- based on the [[https://github.com/ansible/ansible/pull/2106][chroot]] connection plugin.
+- no need to expose the ip addresses to make the containers reachable.
+
+Leverages the power of:
+
+- docker [[https://docs.docker.com/engine/reference/commandline/cp/][cp]].
+- docker [[https://docs.docker.com/engine/reference/commandline/exec/][exec]].
+
+.play dyninv/ping-static-docker.sh /^ansible/
+
+* Custom inventory (contd.). Playing with containers.
+
+.image images/marvelous.jpg 500 _
+
+* Custom inventory (contd.). Playing with containers.
+
+The alternative would be:
+
+- Tell ansible how to map inventory entries to hostnames (or ip4 addresses)
+- ... by creating an inventory
+
+    instance01 ansible_ssh_host=172.17.0.2
+    instance02 ansible_ssh_host=172.17.0.3
+
+- ... or polluting your `/etc/hosts`
+
+    172.17.0.2 instance01
+    172.17.0.3 instance02
+
+- Create a custom docker image with your public ssh key added to `~/.ssh/authorized/keys`.
+
+* Custom inventory (contd.). Playing with containers.
+
+Inspect the containers:
+
+.play dyninv/inspect-ct.py /^metadata/,$
+
+.link https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions list comprehension
+
+* Custom inventory (contd.). Playing with containers.
+
+Encode a [[https://docs.ansible.com/ansible/developing_inventory.html#script-conventions][valid inventory]] as json an return it when called with `--list`:
+
+.code dyninv/empty.py /INVENTORY/,/dump/
+.play dyninv/empty.sh /ansible/
+
+.code dyninv/onehost.py /INVENTORY/,/dump/
+.play dyninv/onehost.sh /ansible/
+
+the `_meta` key is explained [[https://docs.ansible.com/ansible/developing_inventory.html#tuning-the-external-inventory-script][here]].
+
+* Custom inventory (contd.). Everything together.
+
+Algorithm:
+
+- Iterate over all containers.
+- Populate groups based on labels values, example:
+
+    'frontend': [ 'instance04', 'instance15', ... ]
+    'par02': [ 'instance18, 'instance04', ... ]
+
+- Dump a proper inventory json to stdout.
+
+These are your friends:
+
+- dict.[[https://docs.python.org/2/library/stdtypes.html#dict.setdefault][setdefault]]
+- dict.[[https://docs.python.org/2/library/stdtypes.html#dict.values][values]]
+
+* Custom inventory (contd.). Everything together.
+
+.image images/drumroll.jpg 500 _
+
+* Custom inventory (contd.). Everything together.
+
+.code dyninv/docker-custom.py /for/,/dump/
+
+.play dyninv/docker-custom01.sh /dyninv/
+.play dyninv/docker-custom02.sh /echo/,$
+
+* Custom inventory
+
+.image images/full-of-win.jpg
+
+* Dynamic inventory
+
+There is a built-in [[https://github.com/ansible/ansible/blob/devel/contrib/inventory/docker.py][docker]] dynamic inventory.
+
+.play dyninv/docker-builtin00.sh /ansible/
+
+Variables exported
+
+- `docker_name`
+- `docker_id`
+- `docker_state`
+- [[https://github.com/ansible/ansible/blob/stable-1.9/plugins/inventory/docker.py#L31][etc]]
+
+.play dyninv/docker-builtin01.sh /ansible/
+.play dyninv/docker-builtin02.sh /ansible/
+
+* Dynamic inventory. Recap.
+
+- *Use* a dynamic inventory, built-ins are good enough.
+- You probably won't need a custom one.
+- Now you know (hopefully) how to do it.
+
+* Packer with Ansible
+
+.image images/tell-me-more.jpg 500 _
+
+* Packer
+
+- Automates the creation of images.
+- Supports a lot of [[https://www.packer.io/docs/templates/builders.html][builders]]: ec2, gce, do, etc.
+- Supports a lot of [[https://www.packer.io/docs/templates/provisioners.html][provisioners]]: shell, ansible, puppet, etc.
+- Useful, even if you don't have Continuous Delivery.
+
+* Packer (contd.)
+
+It's recommended to have at least a base image.
+
+- Remove unused packages.
+- Strengten sshd config.
+- Install [[http://prometheus.io/docs/instrumenting/exporters/#official-third-party-exporters][node_exporter]] or your favorite exporter.
+- Install [[https://www.consul.io/docs/agent/basics.html][consul]] or your favorite cluster manager agent.
+- Install docker.
+- etc.
+
+* Packer (contd.)
+
+.image images/of-course.jpg 500 _
+
+* Packer with Ansible
+
+.code packer/base-aws.yml
+.code packer/playbooks/base.yml
+.code packer/playbooks/node-exporter.yml
+.code packer/playbooks/docker.yml
+
+* Packer with Ansible (contd.)
+
+.code packer/base-aws.json /builders/,/}]/
+.code packer/base-aws.json /provisioners/,/}]/
+
+* Packer with Ansible (contd.)
+
+.play packer/tree.sh /tree/
+
+Demo
+
+    packer build base-aws.json
+
+.image images/xkcd-compiling.png 300 _
+.caption or "My packer is provisioning."
+
+[[https://aws.amazon.com/blogs/aws/ec2-ami-copy-between-regions/][Cross Region EC2 AMI Copy]], [[https://www.packer.io/docs/templates/post-processors.html][Packer Post-Processors]]
+
+* Packer with Ansible. Recap.
+
+- Reusability, that's all.
+- You update the base image.
+- ... and update your running instances
+- ... with the same playbooks.
+
+Can be extended to:
+
+- base couchdb image.
+- base vpngw image.
+- etc.
+
+* Callbacks
+
+.image images/tell-me-more.jpg 500 _
+
+* Callbacks
+
+- [[https://docs.ansible.com/ansible/developing_plugins.html#callbacks][Documentation]] and [[https://github.com/ansible/ansible/tree/devel/lib/ansible/plugins/callback][examples]].
+- Respond to events with custom behaviour.
+- Create a python file inside a `callback_plugins` directory.
+- Add a class `CallbackModule`.
+- Implement any of the callbacks.
+
+Examples:
+
+- `playbook_on_start`: called before playbook execution.
+- There are more. Look for `call_callback_module` [[https://github.com/ansible/ansible/blob/stable-1.9/lib/ansible/callbacks.py#L337][here]] and [[https://github.com/ansible/ansible/blob/stable-1.9/lib/ansible/callbacks.py#L593][here]].
+
+* Callbacks (contd.)
+
+`callback_plugins/check_branch.py`
+.code callbacks/callback_plugins/check_branch.py 0,/return reachable/
+
+* Callbacks (contd.)
+
+`callback_plugins/check_branch.py`
+.code callbacks/callback_plugins/check_branch.py /class CallbackModule/,$
+
+Demo
+
+* Image credits:
+
+- [[http://www.lessingflynn.com/media/cms/fail28.jpg]]
+- [[http://www.reactionpics.com/wp-content/uploads/full-of-win.jpg]]
+- [[http://i147.photobucket.com/albums/r297/neurocity/Marvelous.jpg]]
+- [[https://imgs.xkcd.com/comics/compiling.png]]

@@ -1,0 +1,92 @@
+---
+- name: configure apt with sane settings
+  template:
+    src=apt.conf.{{ item }}.j2
+    dest=/etc/apt/apt.conf.d/{{ item }}
+  with_items:
+    - 99local
+
+- name: link /etc/mtab to /proc/mounts
+  file:
+    dest=/etc/mtab
+    src=/proc/mounts
+    force=yes
+    state=link
+
+- name: remove source package lines from sources.list
+  lineinfile:
+    dest=/etc/apt/sources.list
+    state=absent
+    backup=yes
+    regexp="^deb-src "
+    # lonely double-quote to fix vim syntax highlighting, do not remove: "
+
+- name: upgrade system
+  apt:
+    update_cache=yes
+    upgrade=yes
+    cache_valid_time=21600
+  notify:
+    - Clean package cache
+    - Remove unused packages
+  tags:
+    - upgrade_system
+
+- name: remove obnoxious packages
+  apt:
+    pkg={{ item }}
+    state=absent
+    purge=yes
+  with_items:
+    - apport
+    - apport-symptoms
+    - byobu
+    - command-not-found-data
+    - dosfstools
+    - eject
+    - landscape-common
+    - laptop-detect
+    - libaccountsservice0
+    - nano
+    - ntfs-3g
+    - open-vm-tools
+    - pollinate
+    - ppp
+    - screen
+    - ufw
+    - vim-tiny
+    - wpasupplicant
+
+- name: install ncurses-term, ntp and sysstat
+  apt:
+    pkg={{ item }}
+    state=present
+  with_items:
+    - ncurses-term
+    - ntp
+    - sysstat
+
+- name: enable sysstat data capturing
+  lineinfile:
+    dest=/etc/default/sysstat
+    state=present
+    line='ENABLED="true"'
+    regexp='^ENABLED='
+
+- name: start sysstat service
+  service:
+    name=sysstat
+    state=started
+    enabled=yes
+
+- name: start ntp service
+  service:
+    name=ntp
+    state=started
+    enabled=yes
+
+- name: clean package cache
+  command: apt-get clean
+
+- name: remove unused packages
+  command: apt-get -qy autoremove
