@@ -7,4 +7,6 @@ License
 Unless otherwise stated:
 
 - code is licensed under GPLv3.
-- slides and other stuff are licensed under CC-BY-SA.
+- slides and other stuff are licensed under [CC-BY-SA][1].
+
+ [1]: https://creativecommons.org/licenses/by-sa/4.0/
